@@ -97,12 +97,11 @@ def get_curriculum_enabled(param_dict):
 
 
 def get_curriculum_params(param_dict):
-    if CURRICULUM_LEARNING in param_dict.keys():
-        curriculum_params = copy.copy(param_dict[CURRICULUM_LEARNING])
-        curriculum_params.pop(CURRICULUM_ENABLED)
-        return curriculum_params
-    else:
+    if CURRICULUM_LEARNING not in param_dict.keys():
         return False
+    curriculum_params = copy.copy(param_dict[CURRICULUM_LEARNING])
+    curriculum_params.pop(CURRICULUM_ENABLED)
+    return curriculum_params
 
 
 def get_pld_enabled(param_dict):
@@ -115,12 +114,11 @@ def get_pld_enabled(param_dict):
 
 
 def get_pld_params(param_dict):
-    if PROGRESSIVE_LAYER_DROP in param_dict.keys():
-        pld_params = copy.copy(param_dict[PROGRESSIVE_LAYER_DROP])
-        pld_params.pop(PLD_ENABLED)
-        return pld_params
-    else:
+    if PROGRESSIVE_LAYER_DROP not in param_dict.keys():
         return False
+    pld_params = copy.copy(param_dict[PROGRESSIVE_LAYER_DROP])
+    pld_params.pop(PLD_ENABLED)
+    return pld_params
 
 
 def get_amp_enabled(param_dict):
@@ -131,12 +129,11 @@ def get_amp_enabled(param_dict):
 
 
 def get_amp_params(param_dict):
-    if AMP in param_dict.keys():
-        amp_params = copy.copy(param_dict[AMP])
-        amp_params.pop(AMP_ENABLED)
-        return amp_params
-    else:
+    if AMP not in param_dict.keys():
         return False
+    amp_params = copy.copy(param_dict[AMP])
+    amp_params.pop(AMP_ENABLED)
+    return amp_params
 
 
 def get_fp16_enabled(param_dict):
@@ -147,12 +144,16 @@ def get_fp16_enabled(param_dict):
 
 
 def get_bfloat16_enabled(param_dict):
-    for key in [BFLOAT16, BFLOAT16_OLD]:
-        if key in param_dict.keys():
-            return get_scalar_param(param_dict[key],
-                                    BFLOAT16_ENABLED,
-                                    BFLOAT16_ENABLED_DEFAULT)
-    return False
+    return next(
+        (
+            get_scalar_param(
+                param_dict[key], BFLOAT16_ENABLED, BFLOAT16_ENABLED_DEFAULT
+            )
+            for key in [BFLOAT16, BFLOAT16_OLD]
+            if key in param_dict.keys()
+        ),
+        False,
+    )
 
 
 def get_fp16_master_weights_and_grads_enabled(param_dict):
@@ -282,26 +283,24 @@ def get_gradient_clipping(param_dict):
 
 
 def get_sparse_attention(param_dict):
-    if SPARSE_ATTENTION in param_dict.keys():
-        sparsity = param_dict[SPARSE_ATTENTION]
-        mode = get_sparse_attention_mode(sparsity)
-
-        if mode == SPARSE_DENSE_MODE:
-            return get_sparse_dense_config(sparsity)
-        elif mode == SPARSE_FIXED_MODE:
-            return get_sparse_fixed_config(sparsity)
-        elif mode == SPARSE_VARIABLE_MODE:
-            return get_sparse_variable_config(sparsity)
-        elif mode == SPARSE_BIGBIRD_MODE:
-            return get_sparse_bigbird_config(sparsity)
-        elif mode == SPARSE_BSLONGFORMER_MODE:
-            return get_sparse_bslongformer_config(sparsity)
-        else:
-            raise NotImplementedError(
-                f"Given sparsity mode, {mode}, has not been implemented yet!")
-
-    else:
+    if SPARSE_ATTENTION not in param_dict.keys():
         return None
+    sparsity = param_dict[SPARSE_ATTENTION]
+    mode = get_sparse_attention_mode(sparsity)
+
+    if mode == SPARSE_DENSE_MODE:
+        return get_sparse_dense_config(sparsity)
+    elif mode == SPARSE_FIXED_MODE:
+        return get_sparse_fixed_config(sparsity)
+    elif mode == SPARSE_VARIABLE_MODE:
+        return get_sparse_variable_config(sparsity)
+    elif mode == SPARSE_BIGBIRD_MODE:
+        return get_sparse_bigbird_config(sparsity)
+    elif mode == SPARSE_BSLONGFORMER_MODE:
+        return get_sparse_bslongformer_config(sparsity)
+    else:
+        raise NotImplementedError(
+            f"Given sparsity mode, {mode}, has not been implemented yet!")
 
 
 def get_sparse_dense_config(sparsity):
@@ -1017,29 +1016,27 @@ class DeepSpeedConfig(object):
             )))
 
     def print(self, name):
-        logger.info("{}:".format(name))
+        logger.info(f"{name}:")
         for arg in sorted(vars(self)):
             if arg != "_param_dict":
                 dots = "." * (29 - len(arg))
-                logger.info("  {} {} {}".format(arg, dots, getattr(self, arg)))
+                logger.info(f"  {arg} {dots} {getattr(self, arg)}")
 
         self.print_user_config()
 
     def _do_error_check(self):
         assert (
             self.train_micro_batch_size_per_gpu
-        ), "DeepSpeedConfig: {} is not defined".format(TRAIN_MICRO_BATCH_SIZE_PER_GPU)
+        ), f"DeepSpeedConfig: {TRAIN_MICRO_BATCH_SIZE_PER_GPU} is not defined"
 
         assert (
             self.gradient_accumulation_steps
-        ), "DeepSpeedConfig: {} is not defined".format(GRADIENT_ACCUMULATION_STEPS)
+        ), f"DeepSpeedConfig: {GRADIENT_ACCUMULATION_STEPS} is not defined"
 
         if self.zero_enabled:
             assert (
                 self.zero_optimization_stage <= ZeroStageEnum.max_stage
-            ), "DeepSpeedConfig: Maximum supported ZeRO stage is {}".format(
-                ZeroStageEnum.max_stage
-            )
+            ), f"DeepSpeedConfig: Maximum supported ZeRO stage is {ZeroStageEnum.max_stage}"
 
         if self.fp16_master_weights_and_gradients:
             assert self.zero_enabled and self.zero_optimization_stage == ZeroStageEnum.gradients, "Fp16_master_weights_and_grads is only supported with ZeRO Stage 2 for now."
@@ -1050,9 +1047,8 @@ class DeepSpeedConfig(object):
         vocabulary_size = self._param_dict.get(VOCABULARY_SIZE, VOCABULARY_SIZE_DEFAULT)
         if vocabulary_size and vocabulary_size % TENSOR_CORE_ALIGN_SIZE != 0:
             logger.warning(
-                "DeepSpeedConfig: vocabulary size {} is not aligned to {}, may import tensor core utilization."
-                .format(vocabulary_size,
-                        TENSOR_CORE_ALIGN_SIZE))
+                f"DeepSpeedConfig: vocabulary size {vocabulary_size} is not aligned to {TENSOR_CORE_ALIGN_SIZE}, may import tensor core utilization."
+            )
 
         if (self.optimizer_params is not None
                 and MAX_GRAD_NORM in self.optimizer_params.keys()
@@ -1060,12 +1056,11 @@ class DeepSpeedConfig(object):
             if fp16_enabled:
                 if self.global_rank == 0:
                     logger.warning(
-                        "DeepSpeedConfig: In FP16 mode, DeepSpeed will pass {}:{} to FP16 wrapper"
-                        .format(MAX_GRAD_NORM,
-                                self.optimizer_params[MAX_GRAD_NORM]))
+                        f"DeepSpeedConfig: In FP16 mode, DeepSpeed will pass {MAX_GRAD_NORM}:{self.optimizer_params[MAX_GRAD_NORM]} to FP16 wrapper"
+                    )
             else:
                 if self.global_rank == 0:
                     logger.warning(
-                        "DeepSpeedConfig: In FP32 mode, DeepSpeed does not permit MAX_GRAD_NORM ({}) > 0, setting to zero"
-                        .format(self.optimizer_params[MAX_GRAD_NORM]))
+                        f"DeepSpeedConfig: In FP32 mode, DeepSpeed does not permit MAX_GRAD_NORM ({self.optimizer_params[MAX_GRAD_NORM]}) > 0, setting to zero"
+                    )
                 self.optimizer_params[MAX_GRAD_NORM] = 0.0

@@ -183,7 +183,7 @@ def fetch_hostfile(hostfile_path):
     # e.g., worker-0 slots=16
     with open(hostfile_path, 'r') as fd:
         resource_pool = collections.OrderedDict()
-        for line in fd.readlines():
+        for line in fd:
             line = line.strip()
             if line == '':
                 # skip empty lines
@@ -317,8 +317,7 @@ def parse_inclusion_exclusion(resource_pool, inclusion, exclusion):
 
 def encode_world_info(world_info):
     world_info_json = json.dumps(world_info).encode('utf-8')
-    world_info_base64 = base64.urlsafe_b64encode(world_info_json).decode('utf-8')
-    return world_info_base64
+    return base64.urlsafe_b64encode(world_info_json).decode('utf-8')
 
 
 def run_autotuning(args, active_resources):
@@ -342,10 +341,10 @@ def parse_num_nodes(str_num_nodes: str, elastic_training: bool):
         min_nodes, max_nodes = int(node_list[0]), -1
     elif len(node_list) == 2 and elastic_training:
         min_nodes, max_nodes = int(node_list[0]), int(node_list[1])
-    elif len(node_list) == 2 and not elastic_training:
+    elif len(node_list) == 2:
         raise RuntimeError("MIN:MAX format is only supported in elastic training")
     else:
-        raise RuntimeError("num_nodes {} is not in MIN:MAX format".format(str_num_nodes))
+        raise RuntimeError(f"num_nodes {str_num_nodes} is not in MIN:MAX format")
 
     return min_nodes, max_nodes
 
@@ -483,20 +482,20 @@ def main(args=None):
 
         curr_path = os.path.abspath('.')
         if 'PYTHONPATH' in env:
-            env['PYTHONPATH'] = curr_path + ":" + env['PYTHONPATH']
+            env['PYTHONPATH'] = f"{curr_path}:" + env['PYTHONPATH']
         else:
             env['PYTHONPATH'] = curr_path
 
         exports = ""
-        for var in env.keys():
-            if any([var.startswith(name) for name in EXPORT_ENVS]):
+        for var in env:
+            if any(var.startswith(name) for name in EXPORT_ENVS):
                 runner.add_export(var, env[var])
 
         for environ_path in DEEPSPEED_ENVIRONMENT_PATHS:
             environ_file = os.path.join(environ_path, DEEPSPEED_ENVIRONMENT_NAME)
             if os.path.isfile(environ_file):
                 with open(environ_file, 'r') as fd:
-                    for var in fd.readlines():
+                    for var in fd:
                         key, val = var.split('=', maxsplit=1)
                         runner.add_export(key, val)
 

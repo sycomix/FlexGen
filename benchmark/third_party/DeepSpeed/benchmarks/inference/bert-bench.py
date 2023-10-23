@@ -48,11 +48,7 @@ deepspeed.init_distributed("nccl")
 
 print(args.model, args.max_tokens, args.dtype)
 
-if args.dtype.lower() == "fp16":
-    dtype = torch.float16
-else:
-    dtype = torch.float32
-
+dtype = torch.float16 if args.dtype.lower() == "fp16" else torch.float32
 pipe = pipeline("fill-mask", model=args.model, framework="pt", device=args.local_rank)
 
 if dtype == torch.half:
@@ -73,7 +69,7 @@ if args.deepspeed:
 responses = []
 times = []
 mtimes = []
-for i in range(args.trials):
+for _ in range(args.trials):
     torch.cuda.synchronize()
     start = time.time()
     r = pipe(f"Hello I'm a {mask} model")
@@ -82,9 +78,7 @@ for i in range(args.trials):
     responses.append(r)
     times.append((end - start))
     mtimes += pipe.model.model_times()
-    #print(f"{pipe.model.model_times()=}")
-
 print_latency(times, "e2e latency")
 print_latency(mtimes, "model latency")
 
-print(responses[0:3])
+print(responses[:3])

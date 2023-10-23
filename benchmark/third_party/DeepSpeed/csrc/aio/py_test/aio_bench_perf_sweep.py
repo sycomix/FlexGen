@@ -149,7 +149,7 @@ def get_sweep_cmd_lines(sweep_config_dict):
     def flatten_options(key, value_list):
         flat_list = []
         for v in value_list:
-            if not type(v) is bool:
+            if type(v) is not bool:
                 flat_list.append(f'--{key} {v}')
             elif v:
                 flat_list.append(f'--{key}')
@@ -235,9 +235,7 @@ def get_log_file(io_op_desc, cmd_line):
 
     def get_config_value(tag, value):
         tag_key = tag_map[tag]
-        if value is None:
-            return tag_key
-        return f'{tag_key}{value}'
+        return tag_key if value is None else f'{tag_key}{value}'
 
     tag_list = [
         SINGLE_SUBMIT,

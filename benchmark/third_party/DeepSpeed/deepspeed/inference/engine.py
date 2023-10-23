@@ -181,7 +181,7 @@ class InferenceEngine(Module):
             local_rank = int(os.getenv('LOCAL_RANK', '0'))
             torch.cuda.set_device(local_rank)
 
-            ranks = [i for i in range(config.tensor_parallel.tp_size)]
+            ranks = list(range(config.tensor_parallel.tp_size))
             self.mp_group = dist.new_group(ranks)
             InferenceEngine.inference_mp_group = self.mp_group
         else:
@@ -273,8 +273,10 @@ class InferenceEngine(Module):
 
         def load(module, state_dict, prefix):
             args = (state_dict, prefix, {}, True, [], [], error_msgs)
-            if len(list(module.parameters())) > 0 and list(
-                    module.parameters())[0].numel() == 0:
+            if (
+                list(module.parameters())
+                and list(module.parameters())[0].numel() == 0
+            ):
                 with GatheredParameters(list(module.parameters(recurse=False)),
                                         modifier_rank=0):
                     if dist.get_rank() == 0:
@@ -283,23 +285,23 @@ class InferenceEngine(Module):
                 if hasattr(module, 'weight'):
                     if 'query_key_value' in prefix:
                         module.weight = self.mp_replace.qkv_copy(
-                            module.weight.data,
-                            state_dict[prefix + 'weight'])
+                            module.weight.data, state_dict[f'{prefix}weight']
+                        )
                     else:
                         module.weight = self.mp_replace.copy(
-                            module.weight.data,
-                            state_dict[prefix + 'weight'])
+                            module.weight.data, state_dict[f'{prefix}weight']
+                        )
                 else:
                     module.norm.weight = self.mp_replace.copy(
-                        module.norm.weight.data,
-                        state_dict[prefix + 'weight'])
-                if prefix + 'bias' in self.key_list:
+                        module.norm.weight.data, state_dict[f'{prefix}weight']
+                    )
+                if f'{prefix}bias' in self.key_list:
                     if hasattr(module, 'norm'):
                         module.norm.bias = self.mp_replace.copy(
-                            module.norm.bias,
-                            state_dict[prefix + 'bias'])
+                            module.norm.bias, state_dict[f'{prefix}bias']
+                        )
                     else:
-                        data = state_dict[prefix + 'bias']
+                        data = state_dict[f'{prefix}bias']
                         data = data.to(torch.cuda.current_device())
                         module.bias = self.mp_replace.copy(module.bias, data)
 
@@ -315,10 +317,12 @@ class InferenceEngine(Module):
             for name, child in module.named_children():
                 if child.__class__ in layer_policies:
                     checking_key = prefix + name + '.'
-                    if not any(checking_key in item for item in self.key_list):
+                    if all(checking_key not in item for item in self.key_list):
                         continue
-                    if len(list(child.parameters())) > 0 and list(
-                            child.parameters())[0].numel() == 0:
+                    if (
+                        list(child.parameters())
+                        and list(child.parameters())[0].numel() == 0
+                    ):
                         if len(child.weight.ds_shape) == 1:
                             child = Normalize(dim=child.weight.ds_shape[-1],
                                               dtype=child.weight.dtype,
@@ -339,10 +343,11 @@ class InferenceEngine(Module):
             checkpoint_dir,
             self.checkpoint_engine) if checkpoint_dir is not None else None
 
-        generic_injection(self.module,
-                          fp16=(config.dtype == torch.half)
-                          or (config.dtype == torch.int8),
-                          enable_cuda_graph=config.enable_cuda_graph)
+        generic_injection(
+            self.module,
+            fp16=config.dtype in [torch.half, torch.int8],
+            enable_cuda_graph=config.enable_cuda_graph,
+        )
 
         if isinstance(self.module, torch.nn.Module):
             # config is our DeepSpeedInferenceConfig and self.config is the HF model config
@@ -369,11 +374,7 @@ class InferenceEngine(Module):
             mp_rank = 0 if self.mpu is None else self.mpu.get_model_parallel_rank()
             mp_rank_str = "{:02d}".format(mp_rank)
 
-        ckpt_name = os.path.join(
-            checkpoints_path,
-            "mp_rank_" + mp_rank_str + "_model_states.pt",
-        )
-        return ckpt_name
+        return os.path.join(checkpoints_path, f"mp_rank_{mp_rank_str}_model_states.pt")
 
     def _load_checkpoint(self, load_dir, load_module_strict=True, tag=None):
         is_pipe_parallel = isinstance(self.module, PipelineModule)
@@ -420,9 +421,7 @@ class InferenceEngine(Module):
             moe, _ = has_moe_layers(self.module)
             if moe:
                 from deepspeed.runtime.engine import DeepSpeedEngine
-                old_moe_load = False
-                if not isinstance(checkpoint['num_experts'], list):
-                    old_moe_load = True
+                old_moe_load = not isinstance(checkpoint['num_experts'], list)
                 DeepSpeedEngine.load_moe_state_dict(
                     load_dir,
                     tag,
@@ -437,7 +436,9 @@ class InferenceEngine(Module):
                 strict=load_module_strict)
 
     def _choose_module_key(self, sd):
-        assert not ('module' in sd and 'model' in sd), "checkpoint has both 'model' and 'module' keys, not sure how to proceed"
+        assert (
+            'module' not in sd or 'model' not in sd
+        ), "checkpoint has both 'model' and 'module' keys, not sure how to proceed"
         assert 'module' in sd or 'model' in sd, "checkpoint contains neither 'model' or 'module' keys, not sure how to proceed"
         if 'module' in sd:
             return 'module'
@@ -448,13 +449,7 @@ class InferenceEngine(Module):
         if not isinstance(self.module, torch.nn.Module):
             return
 
-        if False:  #config.dtype is torch.int8 and self.quantization_scales is None:
-            quantizer = WeightQuantization(mlp_extra_grouping=self.mlp_extra_grouping)
-            model, self.quantization_scales = quantizer.model_quantize(self.module,
-                                                                        self.injection_dict,
-                                                                        self.quantize_bits,
-                                                                        self.quantize_groups)
-        elif config.dtype == torch.half:
+        if config.dtype == torch.half:
             self.module.half()
         elif config.dtype == torch.bfloat16:
             self.module.bfloat16()
@@ -466,7 +461,7 @@ class InferenceEngine(Module):
         cuda_stream = torch.cuda.Stream()
         cuda_stream.wait_stream(torch.cuda.current_stream())
         with torch.cuda.stream(cuda_stream):
-            for i in range(3):
+            for _ in range(3):
                 ret = self.module(*inputs, **kwargs)
         torch.cuda.current_stream().wait_stream(cuda_stream)
 
@@ -515,11 +510,9 @@ class InferenceEngine(Module):
             start = time.time()
 
         if self._config.enable_cuda_graph:
-            if self.cuda_graph_created:
-                outputs = self._graph_replay(*inputs, **kwargs)
-            else:
+            if not self.cuda_graph_created:
                 self._create_cuda_graph(*inputs, **kwargs)
-                outputs = self._graph_replay(*inputs, **kwargs)
+            outputs = self._graph_replay(*inputs, **kwargs)
         else:
             outputs = self.module(*inputs, **kwargs)
 

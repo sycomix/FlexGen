@@ -33,10 +33,7 @@ def get_filename(model_name, batch_size, prompt_len, gen_len,
                  cpu_offload, disk_offload, num_nodes, num_gpus_per_node,
                  use_deepspeed):
     modelsize = model_name.split('-')[-1]
-    if use_deepspeed:
-        filename = "ds-"
-    else:
-        filename = "hf-"
+    filename = "ds-" if use_deepspeed else "hf-"
     filename += f"{modelsize}-bs{batch_size}-prompt{prompt_len}-gen{gen_len}-"
     filename += f"n{num_nodes}x{num_gpus_per_node}-"
     if cpu_offload:
@@ -54,7 +51,7 @@ def meta_to_cpu(container, dtype=None):
     elif isinstance(container, tuple):
         return tuple(meta_to_cpu(x, dtype) for x in container)
     elif isinstance(container, dict):
-        return dict((k, meta_to_cpu(v, dtype)) for k, v in container.items())
+        return {k: meta_to_cpu(v, dtype) for k, v in container.items()}
     else:
         raise ValueError(f"Invalid type: {container}")
 
@@ -183,11 +180,9 @@ def get_hf_opt_model(model_name, dtype, cpu_offload, disk_offload, offload_dir,
         # becase we want to offload as many as possible weights out of GPU
         # to allow a larger batch size.
         device_map = "auto"
-        if cpu_offload:
+        if cpu_offload or disk_offload:
             # `max_memory` should be larger than the embedding.
             # We use 2GB here because the embeding of opt-175b is 1.2GB.
-            max_memory = {k: "2GB" for k in range(num_gpus)}
-        elif disk_offload:
             max_memory = {k: "2GB" for k in range(num_gpus)}
         else:
             max_memory = {k: "14GB" for k in range(num_gpus)}
@@ -218,11 +213,7 @@ def run_generation(model_name, batch_size, prompt_len, gen_len, cut_gen_len,
         model_name.replace("175b", "66b"), padding_side="left")
 
     # Load model
-    if use_int8:
-        dtype = torch.int8
-    else:
-        dtype = torch.float16
-
+    dtype = torch.int8 if use_int8 else torch.float16
     if dummy:
         config = get_model_config(model_name)
         filename = os.path.join(offload_dir,
@@ -300,13 +291,11 @@ def run_generation(model_name, batch_size, prompt_len, gen_len, cut_gen_len,
         assert all(x == prompt_len for x in input_lens)
         assert all(x == prompt_len + execute_gen_len for x in output_lens)
 
-    if args.log_file == "auto":
-        filename = get_filename(model_name, batch_size, prompt_len,
-            gen_len, cpu_offload, disk_offload, num_nodes,
-            num_gpus_per_node, use_deepspeed) + ".log"
-    else:
-        filename = args.log_file
-
+    filename = (
+        f"{get_filename(model_name, batch_size, prompt_len, gen_len, cpu_offload, disk_offload, num_nodes, num_gpus_per_node, use_deepspeed)}.log"
+        if args.log_file == "auto"
+        else args.log_file
+    )
     projected = bool(cut_gen_len)
     opt_config = get_opt_config(args.model)
     cache_size = opt_config.cache_bytes(batch_size, prompt_len + gen_len)

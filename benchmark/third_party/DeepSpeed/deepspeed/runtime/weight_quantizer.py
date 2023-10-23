@@ -38,12 +38,10 @@ class WeightQuantization(object):
                                                    merge_count=len(value_list)):
             groups *= 2
         q_scale = []
-        index = 0
-        for data in value_list:
+        for index, data in enumerate(value_list):
             data_int, data_scale = self.quantize_data(data, quantize_bits, groups, key)
             q_scale.append(data_scale)
             value_list[index] = data_int
-            index += 1
         q_scale = (1 / torch.cat(q_scale,
                                  dim=merge_dim).to(
                                      torch.cuda.current_device()).view(-1).unsqueeze(0))
@@ -58,7 +56,7 @@ class WeightQuantization(object):
         return value_list
 
     def merge_layer_scales(self, layer_scales):
-        max_dim = max([s.shape[-1] for s in layer_scales])
+        max_dim = max(s.shape[-1] for s in layer_scales)
         layer_scales = [
             torch.cat((s,
                        torch.zeros((1,
@@ -69,14 +67,17 @@ class WeightQuantization(object):
         return torch.cat(layer_scales).unsqueeze(0)
 
     def merge_scales(self):
-        all_scales = []
-        for dense_scale, qkv_scale, m4hh_scale, mh4h_scale in \
-            zip(self.dense_scales, self.qkv_scales, self.mlp4hh_scales, self.mlph4h_scales):
-            all_scales.append(
-                self.merge_layer_scales([qkv_scale,
-                                         dense_scale,
-                                         mh4h_scale,
-                                         m4hh_scale]))
+        all_scales = [
+            self.merge_layer_scales(
+                [qkv_scale, dense_scale, mh4h_scale, m4hh_scale]
+            )
+            for dense_scale, qkv_scale, m4hh_scale, mh4h_scale in zip(
+                self.dense_scales,
+                self.qkv_scales,
+                self.mlp4hh_scales,
+                self.mlph4h_scales,
+            )
+        ]
         return torch.cat(all_scales)
 
     def merge_scales_split(self, split_count):
@@ -153,10 +154,10 @@ class WeightQuantization(object):
         policy = {}
         if quantize_policy is not None:
             for layer_name, replace_policy in quantize_policy.items():
-                policy.update({layer_name: (quantize_fn, replace_policy)})
+                policy[layer_name] = (quantize_fn, replace_policy)
         else:
             for plcy in replace_policies:
-                policy.update({plcy._orig_layer_class: (quantize_fn, plcy)})
+                policy[plcy._orig_layer_class] = (quantize_fn, plcy)
 
         quantized_module = _quantize_module(model, policy)
 

@@ -65,9 +65,9 @@ def nvcc_version():
     if cuda_home is None:
         return f"{RED} [FAIL] cannot find CUDA_HOME via torch.utils.cpp_extension.CUDA_HOME={torch.utils.cpp_extension.CUDA_HOME} {END}"
     try:
-        output = subprocess.check_output([cuda_home + "/bin/nvcc",
-                                          "-V"],
-                                         universal_newlines=True)
+        output = subprocess.check_output(
+            [f"{cuda_home}/bin/nvcc", "-V"], universal_newlines=True
+        )
     except FileNotFoundError:
         return f"{RED} [FAIL] nvcc missing {END}"
     output_split = output.split()
@@ -79,10 +79,7 @@ def nvcc_version():
 def debug_report():
     max_dots = 33
 
-    hip_version = None
-    if hasattr(torch.version, 'hip'):
-        hip_version = torch.version.hip
-
+    hip_version = torch.version.hip if hasattr(torch.version, 'hip') else None
     report = [
         ("torch install path",
          torch.__path__),
@@ -120,8 +117,7 @@ def parse_arguments():
     parser.add_argument('--hide_errors_and_warnings',
                         action='store_true',
                         help='Suppress warning and error messages.')
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 
 def main(hide_operator_status=False, hide_errors_and_warnings=False):

@@ -77,7 +77,7 @@ class DeepSpeedCPUAdam(torch.optim.Optimizer):
 
         self.cpu_vendor = get_cpu_info()["vendor_id_raw"].lower()
         if "amd" in self.cpu_vendor:
-            for group_id, group in enumerate(self.param_groups):
+            for group in self.param_groups:
                 for param_id, p in enumerate(group['params']):
                     if p.dtype == torch.half:
                         logger.warning(

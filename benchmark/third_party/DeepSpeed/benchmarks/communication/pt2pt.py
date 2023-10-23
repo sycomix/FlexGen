@@ -5,14 +5,14 @@ import time
 
 
 def timed_pt2pt(input, args):
-    if args.dist == 'torch':
-        import torch.distributed as dist
-    elif args.dist == 'deepspeed':
+    if args.dist == 'deepspeed':
         import deepspeed.comm as dist
 
+    elif args.dist == 'torch':
+        import torch.distributed as dist
     sync_all()
     # Warmups, establish connections, etc.
-    for i in range(args.warmups):
+    for _ in range(args.warmups):
         if dist.get_rank() == 0:
             if args.async_op:
                 dist.isend(input, 1)
@@ -27,7 +27,7 @@ def timed_pt2pt(input, args):
 
     # time the actual comm op trials times and average it
     pre = time.perf_counter()
-    for i in range(args.trials):
+    for _ in range(args.trials):
         if dist.get_rank() == 0:
             if args.async_op:
                 dist.isend(input, 1)
@@ -58,22 +58,18 @@ def timed_pt2pt(input, args):
 
 
 def run_pt2pt(local_rank, args):
-    if args.dist == 'torch':
-        import torch.distributed as dist
-    elif args.dist == 'deepspeed':
+    if args.dist == 'deepspeed':
         import deepspeed.comm as dist
 
+    elif args.dist == 'torch':
+        import torch.distributed as dist
     # Prepare benchmark header
     print_header(args, 'pt2pt')
     global_rank = dist.get_rank()
     world_size = dist.get_world_size()
 
     if args.scan:
-        # Create list of message sizes
-        M_LIST = []
-        for x in (2**p for p in range(1, args.maxsize)):
-            M_LIST.append(x)
-
+        M_LIST = [2**p for p in range(1, args.maxsize)]
         sync_all()
         # loop over various tensor sizes
         for M in M_LIST:

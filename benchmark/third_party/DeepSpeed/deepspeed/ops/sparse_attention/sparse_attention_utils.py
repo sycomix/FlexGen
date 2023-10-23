@@ -46,7 +46,7 @@ class SparseAttentionUtils:
                 max_position,
                 embed_size)
             k = 2
-            for i in range(extend_multiples):
+            for _ in range(extend_multiples):
                 extended_position_embedding[k:(
                     k + original_max_position
                 )] = model.roberta.embeddings.position_embeddings.weight[2:]

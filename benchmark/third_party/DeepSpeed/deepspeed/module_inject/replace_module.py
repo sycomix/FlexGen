@@ -20,10 +20,7 @@ import time
 
 class ReplaceWithTensorSlicing:
     def __init__(self, mp_group=None, mp_size=1, out_dim=1, in_dim=0):
-        if mp_group is not None:
-            self.gpu_index = dist.get_rank(group=mp_group)
-        else:
-            self.gpu_index = 0
+        self.gpu_index = dist.get_rank(group=mp_group) if mp_group is not None else 0
         self.out_dim = out_dim
         self.in_dim = in_dim
         self.mp_size = mp_size
@@ -94,29 +91,28 @@ class ReplaceWithTensorSlicing:
             if src_shape[0] == dst_shape[0] and src_shape[1] == dst_shape[1]:
                 dst.data.copy_(src)
             else:
-                if src_shape[self.in_dim] != dst_shape[self.in_dim]:
-                    self.merge_assert(src_shape[self.in_dim], dst_shape[self.in_dim])
-                    weight_split = torch.split(
-                        src,
-                        dst_shape[self.in_dim],
-                        dim=self.in_dim)[self.gpu_index].to(
-                            torch.cuda.current_device()).contiguous()
-                else:
+                if src_shape[self.in_dim] == dst_shape[self.in_dim]:
                     self.merge_assert(src_shape[self.out_dim], dst_shape[self.out_dim])
                     weight_split = torch.split(
                         src.data,
                         dst_shape[self.out_dim],
                         dim=self.out_dim)[self.gpu_index].to(
                             torch.cuda.current_device()).contiguous()
+                else:
+                    self.merge_assert(src_shape[self.in_dim], dst_shape[self.in_dim])
+                    weight_split = torch.split(
+                        src,
+                        dst_shape[self.in_dim],
+                        dim=self.in_dim)[self.gpu_index].to(
+                            torch.cuda.current_device()).contiguous()
                 dst.data.copy_(weight_split.contiguous())
+        elif src_shape[0] == dst_shape[0]:
+            dst.data.copy_(src)
         else:
-            if src_shape[0] == dst_shape[0]:
-                dst.data.copy_(src)
-            else:
-                bias_split = torch.split(src.data,
-                                         dst_shape[-1])[self.gpu_index].to(
-                                             torch.cuda.current_device()).contiguous()
-                dst.data.copy_(bias_split)
+            bias_split = torch.split(src.data,
+                                     dst_shape[-1])[self.gpu_index].to(
+                                         torch.cuda.current_device()).contiguous()
+            dst.data.copy_(bias_split)
         dst = torch.nn.parameter.Parameter(dst, requires_grad=False)
         if hasattr(src, 'scale'):
             dst.scale = src.scale
@@ -129,7 +125,7 @@ def get_transformer_name(replaced_module):
     transformer_name = ''
     for n, c in replaced_module.named_children():
         if c.__class__ in supported_models:
-            transformer_name += n + '.'
+            transformer_name += f'{n}.'
             for name, child in c.named_children():
                 if child.__class__ is ModuleList:
                     transformer_name += name
@@ -240,9 +236,7 @@ def generic_injection(module, fp16=False, enable_cuda_graph=True):
         config = Diffusers2DTransformerConfig()
         return DeepSpeedDiffusersTransformerBlock(child, config)
 
-    if isinstance(module, torch.nn.Module):
-        pass
-    else:
+    if not isinstance(module, torch.nn.Module):
         if fp16 is False:
             raise ValueError("Generic injection only supported with FP16")
 

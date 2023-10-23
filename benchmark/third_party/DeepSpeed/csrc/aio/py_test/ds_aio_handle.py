@@ -34,28 +34,25 @@ def pre_handle(args, tid, read_op):
                                                 args.single_submit,
                                                 args.overlap_events,
                                                 io_parallel)
-    task_log(tid, f'created deepspeed aio handle')
+    task_log(tid, 'created deepspeed aio handle')
 
-    ctxt = {}
-    ctxt['file'] = file
-    ctxt['num_bytes'] = num_bytes
-    ctxt['handle'] = handle
-    ctxt['buffer'] = buffer
-    ctxt['elapsed_sec'] = 0
-
-    return ctxt
+    return {
+        'file': file,
+        'num_bytes': num_bytes,
+        'handle': handle,
+        'buffer': buffer,
+        'elapsed_sec': 0,
+    }
 
 
 def pre_handle_read(pool_params):
     args, tid = pool_params
-    ctxt = pre_handle(args, tid, True)
-    return ctxt
+    return pre_handle(args, tid, True)
 
 
 def pre_handle_write(pool_params):
     args, tid = pool_params
-    ctxt = pre_handle(args, tid, False)
-    return ctxt
+    return pre_handle(args, tid, False)
 
 
 def post_handle(pool_params):
@@ -140,7 +137,7 @@ def _aio_handle_tasklet(pool_params):
     task_barrier(aio_barrier, args.threads)
 
     # Run pre task
-    task_log(tid, f'running pre-task')
+    task_log(tid, 'running pre-task')
     ctxt = schedule["pre"]((args, tid))
     task_barrier(aio_barrier, args.threads)
 
@@ -155,7 +152,7 @@ def _aio_handle_tasklet(pool_params):
         ctxt["main_task_sec"] += stop_time - start_time
 
     # Run post task
-    task_log(tid, f'running post-task')
+    task_log(tid, 'running post-task')
     ctxt = schedule["post"]((args, tid, ctxt))
     task_barrier(aio_barrier, args.threads)
 

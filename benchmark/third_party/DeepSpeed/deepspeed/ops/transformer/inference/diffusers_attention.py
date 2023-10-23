@@ -51,7 +51,7 @@ class DeepSpeedDiffusersAttentionFunction(Function):
         def _transpose_for_context(x):
             x = x.permute(0, 2, 1, 3)
             new_x_layer_shape = x.size()[:-2] + \
-                                      (hidden_size_per_partition,)
+                                          (hidden_size_per_partition,)
             return x.reshape(*new_x_layer_shape)
 
         def _transpose_for_scores(x):
@@ -68,7 +68,7 @@ class DeepSpeedDiffusersAttentionFunction(Function):
             head_size = input.shape[-1] // config.heads
             do_flash_attn = (head_size <= 128)
             scale = (1 / norm_factor) * (1 / norm_factor)
-            if do_flash_attn and context == None:
+            if do_flash_attn and context is None:
                 qkv_out = linear_func(input,
                                       attn_qkvw,
                                       attn_qkvb if attn_qkvb is not None else attn_qkvw,
@@ -222,7 +222,7 @@ class DeepSpeedDiffusersAttention(nn.Module):
                                     False,
                                     0,
                                     self.config.max_out_tokens)
-        output = DeepSpeedDiffusersAttentionFunction.apply(
+        return DeepSpeedDiffusersAttentionFunction.apply(
             input,
             context,
             input_mask,
@@ -240,6 +240,5 @@ class DeepSpeedDiffusersAttention(nn.Module):
             self.do_out_bias,
             self.score_context_func,
             self.linear_func,
-            self.triton_flash_attn_kernel)
-
-        return output
+            self.triton_flash_attn_kernel,
+        )

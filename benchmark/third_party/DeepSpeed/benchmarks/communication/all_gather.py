@@ -6,14 +6,14 @@ import time
 
 # Run all_gather and print metrics
 def timed_all_gather(input, output, args):
-    if args.dist == 'torch':
-        import torch.distributed as dist
-    elif args.dist == 'deepspeed':
+    if args.dist == 'deepspeed':
         import deepspeed.comm as dist
 
+    elif args.dist == 'torch':
+        import torch.distributed as dist
     sync_all()
     # Warmups, establish connections, etc.
-    for i in range(args.warmups):
+    for _ in range(args.warmups):
         # use all_gather_base if available
         if args.dist == 'torch':
             if hasattr(torch.distributed, "_all_gather_base"):
@@ -29,7 +29,7 @@ def timed_all_gather(input, output, args):
 
     # time the actual comm op trials times and average it
     pre = time.perf_counter()
-    for i in range(args.trials):
+    for _ in range(args.trials):
         # use all_gather_base if available
         if args.dist == 'torch':
             if hasattr(torch.distributed, "_all_gather_base"):
@@ -60,22 +60,18 @@ def timed_all_gather(input, output, args):
 
 
 def run_all_gather(local_rank, args):
-    if args.dist == 'torch':
-        import torch.distributed as dist
-    elif args.dist == 'deepspeed':
+    if args.dist == 'deepspeed':
         import deepspeed.comm as dist
 
+    elif args.dist == 'torch':
+        import torch.distributed as dist
     # Prepare benchmark header
     print_header(args, 'all_gather')
     global_rank = dist.get_rank()
     world_size = dist.get_world_size()
 
     if args.scan:
-        # Create list of message sizes
-        M_LIST = []
-        for x in (2**p for p in range(1, args.maxsize)):
-            M_LIST.append(x)
-
+        M_LIST = [2**p for p in range(1, args.maxsize)]
         sync_all()
         # loop over various tensor sizes
         for M in M_LIST:

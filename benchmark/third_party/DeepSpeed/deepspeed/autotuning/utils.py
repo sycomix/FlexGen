@@ -25,8 +25,8 @@ def was_interruptted(filename):
     if not os.path.exists(filename):
         return "stderr.log does not exist"
     with open(filename) as f:
+        s = "KeyboardInterrupt"
         for line in f:
-            s = "KeyboardInterrupt"
             idx = line.find(s)
             if idx != -1:
                 return True
@@ -67,23 +67,19 @@ def find_replace(target, replace_dict):
 
 
 def get_list(val):
-    if not isinstance(val, list):
-        return [val]
-    else:
-        return val
+    return [val] if not isinstance(val, list) else val
 
 
 def combine_dict(d, u):
     for k, v in u.items():
         if isinstance(v, collections.abc.Mapping):
             d[k] = combine_dict(d.get(k, {}), v)
+        elif k in d:
+            if not isinstance(d[k], list):
+                d[k] = [d[k]]
+            d[k].extend(i for i in get_list(v) if i not in d[k])
         else:
-            if k not in d:
-                d[k] = v
-            else:
-                if not isinstance(d[k], list):
-                    d[k] = [d[k]]
-                d[k].extend(i for i in get_list(v) if i not in d[k])
+            d[k] = v
     return d
 
 
@@ -128,10 +124,9 @@ def replace_dict(d, u, ignored_keys=[]):
 def get_val_by_key(d: dict, k):
     if k in d:
         return d[k]
-    for v in d.values():
-        if isinstance(v, dict):
-            return get_val_by_key(v, k)
-    return None
+    return next(
+        (get_val_by_key(v, k) for v in d.values() if isinstance(v, dict)), None
+    )
 
 
 def set_val_by_key(d: dict, k, vv):
@@ -151,7 +146,7 @@ def fetch_hostfile(hostfile_path):
     # e.g., worker-0 slots=16
     with open(hostfile_path, 'r') as fd:
         resource_pool = collections.OrderedDict()
-        for line in fd.readlines():
+        for line in fd:
             line = line.strip()
             if line == '':
                 # skip empty lines
@@ -167,7 +162,7 @@ def fetch_hostfile(hostfile_path):
             if hostname in resource_pool:
                 logger.error("Hostfile contains duplicate hosts, unable to "
                              "proceed with training.")
-                raise ValueError("host {} is already defined".format(hostname))
+                raise ValueError(f"host {hostname} is already defined")
             resource_pool[hostname] = slot_count
 
     return resource_pool
@@ -175,9 +170,7 @@ def fetch_hostfile(hostfile_path):
 
 def validate_ds_config(config: dict):
     def is_False(config: dict, key):
-        if config is None:
-            return False
-        return bool(config.get(key))
+        return False if config is None else bool(config.get(key))
 
     config_zero = config.get("zero_optimization", {})
     if not config_zero:
@@ -201,10 +194,7 @@ def validate_ds_config(config: dict):
         return True
 
     # HF requires that "ZeRO Offload can only work with DeepSpeed optimizers"
-    if offload and not config.get("optimizer"):
-        return False
-
-    return True
+    return bool(not offload or config.get("optimizer"))
 
 
 def remove_dupe_dicts(l):
@@ -328,7 +318,7 @@ def canonical_name(config: dict, tuning_keys=None, prefix="", omit_val=False):
             return "None_"
         for key, val in offload_config.items():
             key = "".join(map(lambda c: c[0], key.split('_')))
-            if (isinstance(val, int) or isinstance(val, float)) and val > 9000:
+            if (isinstance(val, (int, float))) and val > 9000:
                 cname += key + '{:.1e}'.format(val) + "_"
             else:
                 if isinstance(val, bool):
@@ -358,21 +348,21 @@ def canonical_name(config: dict, tuning_keys=None, prefix="", omit_val=False):
             if isinstance(val, dict):
                 n = get_name_by_keys(val, tuning_keys, omit_val=omit_val)
                 if n != "":
-                    cname += n + "_"
+                    cname += f"{n}_"
             if tuning_keys and key not in tuning_keys:
                 continue
 
             key_str = "".join(map(lambda c: c[0], key.split('_')))
 
             if not omit_val:
-                if (isinstance(val, int) or isinstance(val, float)) and val > 9000:
+                if (isinstance(val, (int, float))) and val > 9000:
                     cname += key_str + '{:.1e}'.format(val) + "_"
                 else:
                     if isinstance(val, bool):
                         val = "T" if val else "F"
                     cname += f"{key_str}{val}_"
             else:
-                cname += key_str + "_"
+                cname += f"{key_str}_"
 
         return cname[:-1]
 
@@ -387,11 +377,8 @@ def get_first_config(config: dict):
     cfg = copy.deepcopy(config)
 
     for key, val in cfg.items():
-        if isinstance(val, dict):
-            if key == "optimizer":  # use user defined optimizer which might have lists of values as params
-                cfg[key] = val
-            else:
-                cfg[key] = get_first_config(val)
+        if isinstance(val, dict):  # use user defined optimizer which might have lists of values as params
+            cfg[key] = val if key == "optimizer" else get_first_config(val)
         if isinstance(val, list) and len(val) > 0:
             cfg[key] = val[0]
     return cfg
@@ -413,44 +400,43 @@ def write_experiments(exps: list, exps_dir: str):
 def memory_to_string(n, postfix="", units=None, precision=2):
     if units is None:
         if n // 10**12 > 0:
-            return str(round(n / 1024**4, precision)) + " T" + postfix
+            return f"{str(round(n / 1024**4, precision))} T{postfix}"
         if n // 10**9 > 0:
-            return str(round(n / 1024**3, precision)) + " G" + postfix
+            return f"{str(round(n / 1024**3, precision))} G{postfix}"
         elif n // 10**6 > 0:
-            return str(round(n / 1024**2, precision)) + " M" + postfix
+            return f"{str(round(n / 1024**2, precision))} M{postfix}"
         elif n // 10**3 > 0:
-            return str(round(n / 1014, precision)) + " K" + postfix
+            return f"{str(round(n / 1014, precision))} K{postfix}"
         else:
-            return str(n) + " "
+            return f"{str(n)} "
     else:
         if units == "T":
-            return str(round(n / 1024**4, precision)) + " " + units
-        if units == "G" + postfix:
-            return str(round(n / 1024**3, precision)) + " " + units
-        elif units == "M" + postfix:
-            return str(round(n / 1024**2, precision)) + " " + units
-        elif units == "K" + postfix:
-            return str(round(n / 1024, precision)) + " " + units
+            return f"{str(round(n / 1024**4, precision))} {units}"
+        if units == f"G{postfix}":
+            return f"{str(round(n / 1024**3, precision))} {units}"
+        elif units == f"M{postfix}":
+            return f"{str(round(n / 1024**2, precision))} {units}"
+        elif units == f"K{postfix}":
+            return f"{str(round(n / 1024, precision))} {units}"
         else:
-            return str(n) + " "
+            return f"{str(n)} "
 
 
 def number_to_string(n, postfix="", units=None, precision=2):
     if units is None:
         if n // 10**9 > 0:
-            return str(round(n / 1000**3, precision)) + " B" + postfix
+            return f"{str(round(n / 1000**3, precision))} B{postfix}"
         if n // 10**6 > 0:
-            return str(round(n / 1000**2, precision)) + " M" + postfix
+            return f"{str(round(n / 1000**2, precision))} M{postfix}"
         elif n // 10**3 > 0:
-            return str(round(n / 1000**1, precision)) + " K" + postfix
+            return f"{str(round(n / 1000**1, precision))} K{postfix}"
         else:
-            return str(n) + " "
+            return f"{str(n)} "
+    elif units == f"B{postfix}":
+        return f"{str(round(n / 1000**3, precision))} {units}"
+    elif units == f"M{postfix}":
+        return f"{str(round(n / 1000**2, precision))} {units}"
+    elif units == f"K{postfix}":
+        return f"{str(round(n / 1000**1, precision))} {units}"
     else:
-        if units == "B" + postfix:
-            return str(round(n / 1000**3, precision)) + " " + units
-        elif units == "M" + postfix:
-            return str(round(n / 1000**2, precision)) + " " + units
-        elif units == "K" + postfix:
-            return str(round(n / 1000**1, precision)) + " " + units
-        else:
-            return str(n) + " "
+        return f"{str(n)} "

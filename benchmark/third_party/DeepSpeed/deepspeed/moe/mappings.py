@@ -41,10 +41,7 @@ def _gather_tokens(input_, dim=0):
                               input_,
                               group=mpu.get_tensor_model_parallel_group())
 
-    # Note: torch.cat already creates a contiguous tensor.
-    output = torch.cat(tensor_list, dim=dim).contiguous()
-
-    return output
+    return torch.cat(tensor_list, dim=dim).contiguous()
 
 
 def _drop_tokens(input_, dim=0):

@@ -46,26 +46,21 @@ class DeepSpeedSelfAttentionFunction(Function):
             new_x_shape = x.size()[:-1] + (num_attention_heads_per_partition,
                                            attention_head_size)
             x_1 = x.view(*new_x_shape)
-            if key:
-                x_1 = x_1.permute(0, 2, 3, 1)
-            else:
-                x_1 = x_1.permute(0, 2, 1, 3)
-            if reshape:
-                return x_1.reshape(x.shape)
-            return x_1.contiguous()
+            x_1 = x_1.permute(0, 2, 3, 1) if key else x_1.permute(0, 2, 1, 3)
+            return x_1.reshape(x.shape) if reshape else x_1.contiguous()
 
         def _transpose_for_context(x):
             x = x.permute(0, 2, 1, 3).contiguous()
             new_x_layer_shape = x.size()[:-2] + \
-                                      (hidden_size_per_partition,)
+                                          (hidden_size_per_partition,)
             return x.view(*new_x_layer_shape).contiguous()
 
         ########### This part is taken/modified form the HF modeling_bloom.py ################
         # Reference: https://github.com/huggingface/transformers/blob/main/src/transformers/models/bloom/modeling_bloom.py
 
         def split_tensor_along_last_dim(tensor,
-                                        num_partitions,
-                                        contiguous_split_chunks=True):
+                                            num_partitions,
+                                            contiguous_split_chunks=True):
             """Split a tensor along its last dimension.
 
             Args:
@@ -79,7 +74,7 @@ class DeepSpeedSelfAttentionFunction(Function):
             # Get the size and dimension.
             last_dim = tensor.dim() - 1
             numerator, denominator = tensor.size()[last_dim], num_partitions
-            if not (numerator % denominator == 0):
+            if numerator % denominator != 0:
                 raise ValueError(f"{numerator} is not divisible by {denominator}")
             last_dim_size = numerator // denominator
             # Split.
@@ -298,11 +293,11 @@ class DeepSpeedSelfAttentionFunction(Function):
 
         def selfAttention_fp():
             vector_matmul_func = inference_cuda_module.vector_matmul_fp16 if config.fp16 else \
-                                    inference_cuda_module.vector_matmul_fp32
+                                        inference_cuda_module.vector_matmul_fp32
 
             if not config.pre_layer_norm:
                 linear_func = inference_cuda_module.linear_layer_fp16 if config.fp16 else \
-                                    inference_cuda_module.linear_layer_fp32
+                                        inference_cuda_module.linear_layer_fp32
                 qkv_out = linear_func(input,
                                       attn_qkvw,
                                       attn_qkvb,
@@ -311,7 +306,7 @@ class DeepSpeedSelfAttentionFunction(Function):
                                       num_attention_heads_per_partition)
             else:
                 qkv_func = inference_cuda_module.qkv_gemm_fp16 if config.fp16 else \
-                                    inference_cuda_module.qkv_gemm_fp32
+                                        inference_cuda_module.qkv_gemm_fp32
                 qkv_out = qkv_func(input,
                                    attn_qkvw,
                                    attn_qkvw.scale,
@@ -455,7 +450,7 @@ class DeepSpeedSelfAttention(nn.Module):
                 norm_w=None,
                 norm_b=None,
                 alibi=None):
-        output = DeepSpeedSelfAttentionFunction.apply(
+        return DeepSpeedSelfAttentionFunction.apply(
             input,
             input_mask,
             head_mask,
@@ -480,6 +475,5 @@ class DeepSpeedSelfAttention(nn.Module):
             self.merge_count,
             self.qkv_merging,
             self.score_context_func,
-            alibi)
-
-        return output
+            alibi,
+        )

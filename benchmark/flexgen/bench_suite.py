@@ -192,7 +192,7 @@ if __name__ == "__main__":
             if log_file:
                 cmd += f" --log-file {args.log_file}"
             if use_page_maga:
-                cmd = "bash /usr/local/bin/pagecache-management.sh " + cmd
+                cmd = f"bash /usr/local/bin/pagecache-management.sh {cmd}"
 
             if log_file:
                 with open(log_file, "a") as f: f.write(f"#### {name}\n```\n{cmd}\n")

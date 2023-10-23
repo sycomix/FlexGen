@@ -31,10 +31,7 @@ args = parser.parse_args()
 
 def get_branch(file_path):
     match = re.match(r".*\/(.*)\.log", file_path)
-    if match is None:
-        return False
-    else:
-        return match.groups()[0]
+    return False if match is None else match.groups()[0]
 
 
 def get_benchmark_params(root_dir, file_path):
@@ -44,17 +41,16 @@ def get_benchmark_params(root_dir, file_path):
     )
     if match is None:
         return False
-    else:
-        model, dtype, graphs, kernel, gpus, version = match.groups()
-        bool_dict = {"true": True, "false": False}
-        return {
-            "model": model,
-            "dtype": dtype,
-            "graphs": bool_dict[graphs.lower()],
-            "kernel": bool_dict[kernel.lower()],
-            "gpus": int(gpus),
-            "version": int(version),
-        }
+    model, dtype, graphs, kernel, gpus, version = match.groups()
+    bool_dict = {"true": True, "false": False}
+    return {
+        "model": model,
+        "dtype": dtype,
+        "graphs": bool_dict[graphs.lower()],
+        "kernel": bool_dict[kernel.lower()],
+        "gpus": int(gpus),
+        "version": int(version),
+    }
 
 
 def get_perf_data(file_content):
@@ -77,10 +73,7 @@ def get_generated_text(file_content, gen_text_n):
 
 def get_error(file_content):
     matches = re.findall(r"Error:\s+(.+?)\n", file_content)
-    if matches is []:
-        return False
-    else:
-        return {f"error": val for val in matches}
+    return False if matches is [] else {"error": val for val in matches}
 
 
 if __name__ == "__main__":
@@ -127,8 +120,7 @@ if __name__ == "__main__":
             if not generated_text:
                 print(f"WARNING: Could not detect generated text for file {file_path}")
 
-            error = get_error(file_content)
-            if error:
+            if error := get_error(file_content):
                 print(f"Error found in {file_path}, collecting error info...")
                 benchmarks_data.append({"branch": branch, **params, **error})
                 continue

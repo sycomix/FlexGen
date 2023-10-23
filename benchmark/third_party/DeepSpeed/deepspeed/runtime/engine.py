@@ -2,6 +2,7 @@
 Copyright 2019 The Microsoft DeepSpeed Team
 """
 
+
 import os
 import re
 import stat
@@ -97,7 +98,6 @@ try:
 except ImportError:
     # Fail silently so we don't spam logs unnecessarily if user isn't using amp
     APEX_INSTALLED = False
-    pass
 
 
 def split_half_float_double_sparse(tensors):
@@ -113,18 +113,17 @@ def split_half_float_double_sparse(tensors):
         assert t.type() in supported_types, f"attempting to reduce an unsupported grad type: {t.type()}"
 
     buckets = []
-    for i, dtype in enumerate(supported_types):
-        bucket = [t for t in tensors if t.type() == dtype]
-        if bucket:
+    for dtype in supported_types:
+        if bucket := [t for t in tensors if t.type() == dtype]:
             buckets.append((dtype, bucket))
     return buckets
 
 
 def print_configuration(args, name):
-    logger.info("{}:".format(name))
+    logger.info(f"{name}:")
     for arg in sorted(vars(args)):
         dots = "." * (29 - len(arg))
-        logger.info("  {} {} {}".format(arg, dots, getattr(args, arg)))
+        logger.info(f"  {arg} {dots} {getattr(args, arg)}")
 
 
 FORWARD_MICRO_TIMER = 'forward_microstep'

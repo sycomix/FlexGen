@@ -40,10 +40,7 @@ def print_rank_0(message):
 
 
 def print_header(args, comm_op):
-    if comm_op == 'pt2pt':
-        world_size = 2
-    else:
-        world_size = dist.get_world_size()
+    world_size = 2 if comm_op == 'pt2pt' else dist.get_world_size()
     tput = f'Throughput ({args.bw_unit})'
     busbw = f'BusBW ({args.bw_unit})'
     header = f"\n---- Performance of {comm_op} on {world_size} devices ---------------------------------------------------------\n"
@@ -69,7 +66,7 @@ def get_bw(comm_op, size, duration, args):
     elif comm_op == "all_reduce":
         tput = (size * 2 / duration)
         busbw = (size / duration) * (2 * (n - 1) / n)
-    elif comm_op == "pt2pt" or comm_op == "broadcast":
+    elif comm_op in ["pt2pt", "broadcast"]:
         tput = (size / duration)
         busbw = tput
     else:
@@ -107,7 +104,7 @@ def max_numel(comm_op, dtype, mem_factor, local_rank, args):
     dtype_size = _element_size(dtype)
     max_memory_per_gpu = torch.cuda.get_device_properties(
         local_rank).total_memory * mem_factor
-    if comm_op == 'all_reduce' or comm_op == 'pt2pt' or comm_op == 'broadcast':
+    if comm_op in ['all_reduce', 'pt2pt', 'broadcast']:
         elements_per_gpu = int(max_memory_per_gpu // dtype_size)
     elif comm_op == 'all_gather':
         # all_gather performance is lower for non-powers of two, and the output buffer size scales with world size
@@ -135,7 +132,7 @@ def convert_size(size_bytes):
     i = int(math.floor(math.log(size_bytes, 1024)))
     p = math.pow(1024, i)
     s = round(size_bytes / p, 2)
-    return "%s %s" % (s, size_name[i])
+    return f"{s} {size_name[i]}"
 
 
 # Copied from torch. Need to add the func here for old torch compatibility.

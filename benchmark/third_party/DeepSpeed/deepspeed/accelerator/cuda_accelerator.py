@@ -9,9 +9,7 @@ class CUDA_Accelerator(DeepSpeedAccelerator):
 
     # Device APIs
     def device_name(self, device_index=None):
-        if device_index == None:
-            return 'cuda'
-        return 'cuda:{}'.format(device_index)
+        return 'cuda' if device_index is None else f'cuda:{device_index}'
 
     def device(self, device_index=None):
         return torch.cuda.device(device_index)
@@ -23,7 +21,7 @@ class CUDA_Accelerator(DeepSpeedAccelerator):
         return torch.cuda.current_device()
 
     def current_device_name(self):
-        return 'cuda:{}'.format(torch.cuda.current_device())
+        return f'cuda:{torch.cuda.current_device()}'
 
     def device_count(self):
         return torch.cuda.device_count()
@@ -125,16 +123,11 @@ class CUDA_Accelerator(DeepSpeedAccelerator):
 
     def is_fp16_supported(self):
         major, _ = torch.cuda.get_device_capability()
-        if major >= 7:
-            return True
-        else:
-            return False
+        return major >= 7
 
     # Misc
     def amp(self):
-        if hasattr(torch.cuda, 'amp'):
-            return torch.cuda.amp
-        return None
+        return torch.cuda.amp if hasattr(torch.cuda, 'amp') else None
 
     def is_available(self):
         return torch.cuda.is_available()
@@ -188,10 +181,7 @@ class CUDA_Accelerator(DeepSpeedAccelerator):
 
     def on_accelerator(self, tensor):
         device_str = str(tensor.device)
-        if device_str.startswith('cuda:'):
-            return True
-        else:
-            return False
+        return bool(device_str.startswith('cuda:'))
 
     def op_builder_dir(self):
         return "deepspeed.ops.op_builder"

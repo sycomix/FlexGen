@@ -130,7 +130,7 @@ def main():
     args = parse_args()
     current_env = os.environ.copy()
 
-    for k in current_env.keys():
+    for k in current_env:
         if "NCCL" in k:
             logger.info(f"{args.node_rank} {k}={current_env[k]}")
 
@@ -286,13 +286,14 @@ def main():
         run_id = os.environ.get("ELASTIC_RUN_ID", ELASTIC_TRAINING_ID_DEFAULT)
 
         # Creating config for rendezvous class
-        rdzv_parameters = RendezvousParameters(backend='c10d',
-                                               endpoint=args.master_addr + ":" +
-                                               str(args.master_port),
-                                               run_id=run_id,
-                                               min_nodes=args.min_elastic_nodes,
-                                               max_nodes=args.max_elastic_nodes,
-                                               **rdzv_configs)
+        rdzv_parameters = RendezvousParameters(
+            backend='c10d',
+            endpoint=f"{args.master_addr}:{str(args.master_port)}",
+            run_id=run_id,
+            min_nodes=args.min_elastic_nodes,
+            max_nodes=args.max_elastic_nodes,
+            **rdzv_configs,
+        )
 
         spec = WorkerSpec(
             role='trainer',
@@ -341,14 +342,13 @@ def main():
             if process.poll() is None:
                 # the process is still running
                 continue
+            if process.returncode != 0:
+                last_return_code = process.returncode  # for sigkill_handler
+                sigkill_handler(signal.SIGTERM, None)  # not coming back
             else:
-                if process.returncode != 0:
-                    last_return_code = process.returncode  # for sigkill_handler
-                    sigkill_handler(signal.SIGTERM, None)  # not coming back
-                else:
-                    # exited cleanly
-                    logger.info(f"Process {process.pid} exits successfully.")
-                    finished_processes.append(process)
+                # exited cleanly
+                logger.info(f"Process {process.pid} exits successfully.")
+                finished_processes.append(process)
         alive_processes = set(alive_processes) - set(finished_processes)
 
         time.sleep(1)

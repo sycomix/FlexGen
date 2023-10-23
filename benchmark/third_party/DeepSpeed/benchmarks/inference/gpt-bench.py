@@ -100,7 +100,7 @@ if args.deepspeed:
 responses = []
 times = []
 mtimes = []
-for i in range(args.trials):
+for _ in range(args.trials):
     torch.cuda.synchronize()
     start = time.time()
     r = pipe("DeepSpeed is", do_sample=False, max_new_tokens=args.max_tokens)
@@ -116,7 +116,7 @@ if args.local_rank == 0:
     print_latency(map(lambda t: t / (args.max_tokens - 3),
                       times),
                   "(e2e) per token latency")
-    print(f"RESPONSE 0:")
+    print("RESPONSE 0:")
     print("-" * 30)
     print(responses[0][0]["generated_text"])
     print("-" * 30)

@@ -1,6 +1,7 @@
 '''
 Copyright 2021 The Microsoft DeepSpeed Team
 '''
+
 # The file has been adapted from two fairscale files:
 # (1) https://github.com/facebookresearch/fairscale/blob/master/fairscale/nn/moe/moe_layer.py
 # (2) https://github.com/facebookresearch/fairscale/blob/master/fairscale/nn/moe/top2gate.py
@@ -23,11 +24,7 @@ import torch.nn.functional as F
 from deepspeed.utils import groups
 from .mappings import drop_tokens, gather_tokens
 
-if TYPE_CHECKING:
-    Base = Module[Tensor]
-else:
-    Base = Module
-
+Base = Module[Tensor] if TYPE_CHECKING else Module
 uniform_map: Dict[torch.device, Callable] = {}
 gumbel_map: Dict[torch.device, Callable] = {}
 exp_selection_uniform_map: Dict[torch.device, Callable] = {}
@@ -40,7 +37,6 @@ try:
 except:
     # Fail silently so we don't spam logs unnecessarily if user isn't using tutel
     TUTEL_INSTALLED = False
-    pass
 
 
 def multiplicative_jitter(x, device: torch.device, epsilon=1e-2):
@@ -379,7 +375,7 @@ class TopKGate(Module):
         super().__init__()
 
         # Only top-1 and top-2 are supported at the moment.
-        if k != 1 and k != 2:
+        if k not in [1, 2]:
             raise ValueError('Only top-1 and top-2 gatings are supported.')
         self.wg = torch.nn.Linear(model_dim, num_experts, bias=False).float()
         self.k = k
@@ -480,7 +476,7 @@ class MOELayer(Base):
         elif use_tutel and not TUTEL_INSTALLED:
             logger.warning("Tutel optimization requested but not installed. "
                            "Proceeding without Tutel.")
-        elif use_tutel and TUTEL_INSTALLED and gate.k != 1:
+        elif use_tutel and gate.k != 1:
             logger.warning(
                 "To enable Tutel optimization, use top-1 instead of top-2 gate. "
                 "Proceeding without Tutel.")

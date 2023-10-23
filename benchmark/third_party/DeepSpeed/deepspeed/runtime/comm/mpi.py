@@ -281,7 +281,7 @@ class MpiBackend(object):
                         self.compression_backend.cupy2torch(
                             cupy_recvbuf_scale_server)).flatten().data)
         if original_size != worker_error_size:
-            buffer_m = buffer_m[0:original_size]
+            buffer_m = buffer_m[:original_size]
         if len(original_shape) > 1:
             buffer_m = buffer_m.reshape(original_shape)
 

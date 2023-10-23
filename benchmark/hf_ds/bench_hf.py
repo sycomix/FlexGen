@@ -36,19 +36,16 @@ def run_huggingface(model, prompt_len, gen_len, cut_gen_len, batch_size,
 
 
 def bench_one_case(case):
-    if case.model == "facebook/opt-6.7b":
-        cut_gen_len = None
-    else:
-        cut_gen_len = 5
+    cut_gen_len = None if case.model == "facebook/opt-6.7b" else 5
     dummy = True
 
-    if case.device == "gpu":
-        cpu = disk = False
-    elif case.device == "cpu":
+    if case.device == "cpu":
         cpu, disk = True, False
     elif case.device == "disk":
         cpu, disk = False, True
 
+    elif case.device == "gpu":
+        cpu = disk = False
     use_deepspeed = case.library == "ds"
 
     run_huggingface(case.model, case.prompt_len, case.gen_len, cut_gen_len,

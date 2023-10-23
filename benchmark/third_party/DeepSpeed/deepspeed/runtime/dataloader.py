@@ -105,7 +105,7 @@ class DeepSpeedDataLoader(object):
                                          collate_fn=self.collate_fn,
                                          num_workers=self.num_local_io_workers,
                                          drop_last=self.dataloader_drop_last)
-        self.data = (x for x in self.dataloader)
+        self.data = iter(self.dataloader)
 
         return self.dataloader
 

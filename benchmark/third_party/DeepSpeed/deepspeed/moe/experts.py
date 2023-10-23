@@ -11,7 +11,8 @@ class Experts(torch.nn.Module):
         super(Experts, self).__init__()
 
         self.deepspeed_experts = torch.nn.ModuleList(
-            [copy.deepcopy(expert) for i in range(num_local_experts)])
+            [copy.deepcopy(expert) for _ in range(num_local_experts)]
+        )
         self.num_local_experts = num_local_experts
 
         # TODO: revisit allreduce for moe.gate...
@@ -30,5 +31,4 @@ class Experts(torch.nn.Module):
                 out = out[0]  # Ignore the bias term for now
             expert_outputs += [out]
 
-        expert_output = torch.cat(expert_outputs, dim=1)
-        return expert_output
+        return torch.cat(expert_outputs, dim=1)

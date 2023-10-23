@@ -5,20 +5,20 @@ import time
 
 
 def timed_all_reduce(input, args):
-    if args.dist == 'torch':
-        import torch.distributed as dist
-    elif args.dist == 'deepspeed':
+    if args.dist == 'deepspeed':
         import deepspeed.comm as dist
 
+    elif args.dist == 'torch':
+        import torch.distributed as dist
     sync_all()
     # Warmups, establish connections, etc.
-    for i in range(args.warmups):
+    for _ in range(args.warmups):
         dist.all_reduce(input, async_op=args.async_op)
     sync_all()
 
     # time the actual comm op trials times and average it
     pre = time.perf_counter()
-    for i in range(args.trials):
+    for _ in range(args.trials):
         dist.all_reduce(input, async_op=args.async_op)
     sync_all()
     duration = time.perf_counter() - pre
@@ -39,11 +39,11 @@ def timed_all_reduce(input, args):
 
 
 def run_all_reduce(local_rank, args):
-    if args.dist == 'torch':
-        import torch.distributed as dist
-    elif args.dist == 'deepspeed':
+    if args.dist == 'deepspeed':
         import deepspeed.comm as dist
 
+    elif args.dist == 'torch':
+        import torch.distributed as dist
     # Prepare benchmark header
     print_header(args, 'all_reduce')
 
@@ -51,10 +51,7 @@ def run_all_reduce(local_rank, args):
     global_rank = dist.get_rank()
 
     if args.scan:
-        M_LIST = []
-        for x in (2**p for p in range(1, args.maxsize)):
-            M_LIST.append(x)
-
+        M_LIST = [2**p for p in range(1, args.maxsize)]
         sync_all()
         # loop over various tensor sizes
         for M in M_LIST:

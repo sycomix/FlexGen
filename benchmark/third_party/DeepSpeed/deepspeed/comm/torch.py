@@ -90,7 +90,6 @@ class TorchBackend(Backend):
                 "unable to find torch.distributed._all_gather_base. will fall back to "
                 "torch.distributed.reduce_scatter which will result in suboptimal performance. "
                 "please consider upgrading your pytorch installation.")
-            pass
 
     def reduce_scatter_base(self,
                             output_tensor,
@@ -109,7 +108,6 @@ class TorchBackend(Backend):
                 "unable to find torch.distributed._reduce_scatter_base. will fall back to "
                 "torch.distributed.reduce_scatter which will result in suboptimal performance. "
                 "please consider upgrading your pytorch installation.")
-            pass
 
     def all_to_all_single(self,
                           output,

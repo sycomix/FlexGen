@@ -53,9 +53,7 @@ class QuantAct(nn.Module):
             self.x_min_max[1] = self.x_min_max[1] * self.act_range_momentum + x_max * (
                 1 - self.act_range_momentum)
 
-        x_q = self.act_function(x, num_bits, self.x_min_max[0], self.x_min_max[1])
-
-        return x_q
+        return self.act_function(x, num_bits, self.x_min_max[0], self.x_min_max[1])
 
 
 class Embedding_Compress(nn.Embedding):
@@ -68,10 +66,7 @@ class Embedding_Compress(nn.Embedding):
         self.weight_quantization_enabled = False
 
     def extra_repr(self):
-        return 'num_embeddings={}, embedding_dim={}, weight_quantization={}'.format(
-            self.num_embeddings,
-            self.embedding_dim,
-            self.weight.target_bits)
+        return f'num_embeddings={self.num_embeddings}, embedding_dim={self.embedding_dim}, weight_quantization={self.weight.target_bits}'
 
     def enable_weight_quantization(self,
                                    start_bits,
@@ -121,14 +116,15 @@ class Embedding_Compress(nn.Embedding):
         else:
             weight = self.weight
 
-        out = nn.functional.embedding(input,
-                                      weight,
-                                      self.padding_idx,
-                                      self.max_norm,
-                                      self.norm_type,
-                                      self.scale_grad_by_freq,
-                                      self.sparse)
-        return out
+        return nn.functional.embedding(
+            input,
+            weight,
+            self.padding_idx,
+            self.max_norm,
+            self.norm_type,
+            self.scale_grad_by_freq,
+            self.sparse,
+        )
 
 
 class LinearLayer_Compress(nn.Linear):
@@ -152,9 +148,7 @@ class LinearLayer_Compress(nn.Linear):
         self.activation_quantization_enabled = False
 
     def extra_repr(self):
-        return 'in_features={}, out_features={}, bias={}, sparse pruning={}, row pruning={}, head pruning={}, activation quantization={}, weight_quantization={}'.format(
-            self.in_features, self.out_features, self.bias is not None, self.sparse_pruning_method is not None, \
-            self.row_pruning_method is not None, self.head_pruning_method is not None, self.activation_quantization_method is not None, self.weight.target_bits)
+        return f'in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None}, sparse pruning={self.sparse_pruning_method is not None}, row pruning={self.row_pruning_method is not None}, head pruning={self.head_pruning_method is not None}, activation quantization={self.activation_quantization_method is not None}, weight_quantization={self.weight.target_bits}'
 
     def enable_sparse_pruning(self, ratio, method):
         # Here, we support two cases: L1 norm based pruning and topk based pruning
@@ -205,14 +199,13 @@ class LinearLayer_Compress(nn.Linear):
 
         if method not in ['topk']:
             raise NotImplementedError
-        else:
-            self.head_pruning_ratio = ratio
-            self.head_pruning_scores = nn.Parameter(torch.Tensor(
-                1,
-                self.num_heads))  # we apply the pruning to O matrix
-            self.head_pruning_scores.data = self.head_pruning_scores.data.to(
-                self.weight.device)
-            init.kaiming_uniform_(self.head_pruning_scores, a=math.sqrt(5))
+        self.head_pruning_ratio = ratio
+        self.head_pruning_scores = nn.Parameter(torch.Tensor(
+            1,
+            self.num_heads))  # we apply the pruning to O matrix
+        self.head_pruning_scores.data = self.head_pruning_scores.data.to(
+            self.weight.device)
+        init.kaiming_uniform_(self.head_pruning_scores, a=math.sqrt(5))
 
     def fix_sparse_pruning_helper(self):
         mask = self.get_mask(pruning_type='sparse')
@@ -270,31 +263,30 @@ class LinearLayer_Compress(nn.Linear):
         # similar as row/col pruning, head pruning also needs to prune QKV which is associated with O matrix
         num_heads = num_heads if num_heads else self.num_heads
         if mask is None:
-            if self.head_pruning_method == 'topk':
-                mask = self.get_mask(pruning_type='head').bool()
-                if dim_reduction:
-                    shape = self.weight.size(0)
-                    start_bits = self.weight.start_bits
-                    target_bits = self.weight.target_bits
-                    q_period = self.weight.q_period
-                    self.weight = nn.Parameter(self.weight.data.t().reshape(num_heads, -1)[mask.view(-1), :].reshape(-1, shape).t())
-                    self.weight.start_bits = start_bits
-                    self.weight.target_bits = target_bits
-                    self.weight.q_period = q_period
-                else:
-
-                    shape = self.weight.size()
-                    self.weight.data = (self.weight.data.t().reshape(self.num_heads,
-                                                                     -1) *
-                                        mask.view(-1,
-                                                  1)).reshape(shape[1],
-                                                              shape[0]).t()
-
-                if self.head_pruning_method == 'topk':
-                    del self.head_pruning_scores
-                self.head_pruning_method = None
-            else:
+            if self.head_pruning_method != 'topk':
                 raise NotImplementedError
+            mask = self.get_mask(pruning_type='head').bool()
+            if dim_reduction:
+                shape = self.weight.size(0)
+                start_bits = self.weight.start_bits
+                target_bits = self.weight.target_bits
+                q_period = self.weight.q_period
+                self.weight = nn.Parameter(self.weight.data.t().reshape(num_heads, -1)[mask.view(-1), :].reshape(-1, shape).t())
+                self.weight.start_bits = start_bits
+                self.weight.target_bits = target_bits
+                self.weight.q_period = q_period
+            else:
+
+                shape = self.weight.size()
+                self.weight.data = (self.weight.data.t().reshape(self.num_heads,
+                                                                 -1) *
+                                    mask.view(-1,
+                                              1)).reshape(shape[1],
+                                                          shape[0]).t()
+
+            if self.head_pruning_method == 'topk':
+                del self.head_pruning_scores
+            self.head_pruning_method = None
         else:
             start_bits = self.weight.start_bits
             target_bits = self.weight.target_bits
@@ -381,11 +373,10 @@ class LinearLayer_Compress(nn.Linear):
         self.activation_quantization_method = f"{quantization_type}_{range_calibration}"
         if range_calibration == 'static':
             self.activation_quantizer = QuantAct(quant_mode=quantization_type)
+        elif quantization_type == 'symmetric':
+            self.activation_quantizer = SymQuantizer.apply
         else:
-            if quantization_type == 'symmetric':
-                self.activation_quantizer = SymQuantizer.apply
-            else:
-                self.activation_quantizer = AsymQuantizer.apply
+            self.activation_quantizer = AsymQuantizer.apply
 
     def head_pruning_reshape(self, w, mask):
         shape = w.shape
@@ -402,11 +393,9 @@ class LinearLayer_Compress(nn.Linear):
                                            None,
                                            None,
                                            self.weight_quantize_num_groups)
-            bias = self.bias
         else:
             weight = self.weight
-            bias = self.bias
-
+        bias = self.bias
         if self.sparse_pruning_enabled and self.sparse_pruning_method:
             mask = self.get_mask(pruning_type='sparse')
             weight = weight * mask.view(self.weight.size())
@@ -432,13 +421,11 @@ class LinearLayer_Compress(nn.Linear):
                                               None,
                                               num_groups)
 
-        if skip_bias_add:
-            # used for mpu linear layers
-            output = nn.functional.linear(input, weight, None)
-            return output, bias
-        else:
-            output = nn.functional.linear(input, weight, bias)
-            return output
+        if not skip_bias_add:
+            return nn.functional.linear(input, weight, bias)
+        # used for mpu linear layers
+        output = nn.functional.linear(input, weight, None)
+        return output, bias
 
 
 class Conv2dLayer_Compress(nn.Conv2d):
@@ -475,11 +462,7 @@ class Conv2dLayer_Compress(nn.Conv2d):
             s += ', padding_mode={padding_mode}'
         output = s.format(**self.__dict__)
 
-        return output + ' sparse pruning={}, channel pruning={}, activation quantization={}, weight_quantization={}'.format(
-            self.sparse_pruning_method is not None,
-            self.channel_pruning_method is not None,
-            self.activation_quantization_method is not None,
-            self.weight.target_bits)
+        return f'{output} sparse pruning={self.sparse_pruning_method is not None}, channel pruning={self.channel_pruning_method is not None}, activation quantization={self.activation_quantization_method is not None}, weight_quantization={self.weight.target_bits}'
 
     def enable_sparse_pruning(self, ratio, method):
         self.sparse_pruning_ratio = ratio
@@ -538,28 +521,27 @@ class Conv2dLayer_Compress(nn.Conv2d):
 
     def fix_channel_pruning_helper(self, mask=None, dim_reduction=False):
         if mask is None:
-            if self.channel_pruning_method in ['l1', 'topk']:
-                mask = self.get_mask(pruning_type='channel').bool()
-                if dim_reduction:
-                    start_bits = self.weight.start_bits
-                    target_bits = self.weight.target_bits
-                    q_period = self.weight.q_period
-                    self.weight = nn.Parameter(self.weight.data[mask.view(-1), ...])
-                    self.weight.start_bits = start_bits
-                    self.weight.target_bits = target_bits
-                    self.weight.q_period = q_period
-                    if self.bias is not None:
-                        self.bias = nn.Parameter(self.bias.data[mask.view(-1)])
-                else:
-                    self.weight.data = self.weight.data * mask.view(-1, 1, 1, 1)
-                    if self.bias is not None:
-                        self.bias.data = self.bias.data * mask.view(-1)
-                del self.channel_pruning_mask
-                if self.channel_pruning_method == 'topk':
-                    del self.channel_mask_scores
-                self.channel_pruning_method = None
-            else:
+            if self.channel_pruning_method not in ['l1', 'topk']:
                 raise NotImplementedError
+            mask = self.get_mask(pruning_type='channel').bool()
+            if dim_reduction:
+                start_bits = self.weight.start_bits
+                target_bits = self.weight.target_bits
+                q_period = self.weight.q_period
+                self.weight = nn.Parameter(self.weight.data[mask.view(-1), ...])
+                self.weight.start_bits = start_bits
+                self.weight.target_bits = target_bits
+                self.weight.q_period = q_period
+                if self.bias is not None:
+                    self.bias = nn.Parameter(self.bias.data[mask.view(-1)])
+            else:
+                self.weight.data = self.weight.data * mask.view(-1, 1, 1, 1)
+                if self.bias is not None:
+                    self.bias.data = self.bias.data * mask.view(-1)
+            del self.channel_pruning_mask
+            if self.channel_pruning_method == 'topk':
+                del self.channel_mask_scores
+            self.channel_pruning_method = None
         else:
             start_bits = self.weight.start_bits
             target_bits = self.weight.target_bits
@@ -631,11 +613,10 @@ class Conv2dLayer_Compress(nn.Conv2d):
         self.activation_quantization_method = f"{quantization_type}_{range_calibration}"
         if range_calibration == 'static':
             self.activation_quantizer = QuantAct(quant_mode=quantization_type)
+        elif quantization_type == 'symmetric':
+            self.activation_quantizer = SymQuantizer.apply
         else:
-            if quantization_type == 'symmetric':
-                self.activation_quantizer = SymQuantizer.apply
-            else:
-                self.activation_quantizer = AsymQuantizer.apply
+            self.activation_quantizer = AsymQuantizer.apply
 
     def forward(self, input):
 
@@ -645,11 +626,9 @@ class Conv2dLayer_Compress(nn.Conv2d):
                                            None,
                                            None,
                                            self.weight_quantize_num_groups)
-            bias = self.bias
         else:
             weight = self.weight
-            bias = self.bias
-
+        bias = self.bias
         if self.sparse_pruning_enabled and self.sparse_pruning_method:
             mask = self.get_mask(pruning_type='sparse')
             weight = weight * mask.view(self.weight.size())
@@ -738,9 +717,7 @@ def _split(input_):
 
     # Note: torch.split does not create contiguous tensors by default.
     rank = dist.get_rank(group=group)
-    output = input_list[rank].contiguous()
-
-    return output
+    return input_list[rank].contiguous()
 
 
 def _gather(input_):
@@ -760,10 +737,7 @@ def _gather(input_):
     tensor_list[rank] = input_
     dist.all_gather(tensor_list, input_, group=group)
 
-    # Note: torch.cat already creates a contiguous tensor.
-    output = torch.cat(tensor_list, dim=last_dim).contiguous()
-
-    return output
+    return torch.cat(tensor_list, dim=last_dim).contiguous()
 
 
 class _CopyToModelParallelRegion(torch.autograd.Function):
@@ -912,10 +886,7 @@ class RowParallelLinear_Compress(LinearLayer_Compress):
         # All-reduce across all the partitions.
         output_ = reduce_from_model_parallel_region(output_parallel)
         if not self.skip_bias_add:
-            if bias is not None:
-                output = output_ + bias
-            else:
-                output = output_
+            output = output_ + bias if bias is not None else output_
             output_bias = None
         else:
             output = output_
